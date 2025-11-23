@@ -4,3 +4,11 @@ desc: AstrBot 插件示例。 # 插件简短描述
 version: v1.3.0 # 插件版本号。格式：v1.1.1 或者 v1.1
 author: Soulter # 作者
 repo: https://github.com/Soulter/helloworld # 插件的仓库地址
+
+# 插件配置：如果 AstrBot 前端支持该结构，前端可展示为可编辑 JSON 配置项
+config:
+	- key: rules_json
+		name: 插件规则 (JSON)
+		type: text
+		default: ""
+		description: 编辑插件规则 JSON，会写入到 `configs/config.json` 并生效

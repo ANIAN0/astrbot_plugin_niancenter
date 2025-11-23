@@ -1,0 +1,14 @@
+{
+  "http_port": 6180,
+  "rules": [
+    {
+      "name": "图片拼接",
+      "keywords": ["图片拼接"],
+      "url": "http://124.156.205.61:5678/webhook/692d23a8-bc09-4606-bc31-7707de548537",
+      "method": "POST",
+      "pass_event": true,
+      "reply_type": "image",
+      "on_error": "图片生成失败"
+    }
+  ]
+}
