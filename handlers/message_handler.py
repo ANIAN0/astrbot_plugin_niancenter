@@ -5,8 +5,8 @@ from typing import Any
 
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Plain, Image, Video
-from core.request import fetch_json
-from core.unified_store import UnifiedStore
+from ..core.request import fetch_json
+from ..core.unified_store import UnifiedStore
 from astrbot.api.event import MessageChain
 
 
@@ -40,29 +40,39 @@ class MessageHandler:
             if isinstance(keywords, str):
                 keywords = [keywords]
             if any(k in message_str for k in keywords):
-                # record unified
+                # record unified_msg_origin (prefer storing the unified string per official docs)
                 try:
                     umo = getattr(event, "unified_msg_origin", None)
-                    key = None
+                    unified_value = None
+                    if isinstance(umo, str):
+                        unified_value = umo
+                    elif isinstance(umo, dict) and isinstance(umo.get("unified_msg_origin"), str):
+                        unified_value = umo.get("unified_msg_origin")
+
+                    # choose a stable key to map to the unified string: prefer sender id, then sender name, then the unified string itself
+                    store_key = None
                     try:
                         if hasattr(event, "get_sender_id"):
-                            key = str(event.get_sender_id())
+                            sid = event.get_sender_id()
+                            if sid is not None:
+                                store_key = str(sid)
                     except Exception:
-                        key = None
-                    if not key and isinstance(umo, dict):
-                        for candidate in ("sender", "user", "target", "id", "user_id"):
-                            if candidate in umo:
-                                val = umo.get(candidate)
-                                if isinstance(val, (str, int)):
-                                    key = str(val)
-                                    break
-                    if not key:
+                        store_key = None
+
+                    if not store_key:
                         try:
-                            key = str(event.get_sender_name())
+                            sname = event.get_sender_name()
+                            if sname:
+                                store_key = str(sname)
                         except Exception:
-                            key = None
-                    if key and umo is not None:
-                        self.unified_store.set(key, umo)
+                            store_key = None
+
+                    if not store_key and unified_value:
+                        store_key = unified_value
+
+                    if store_key and unified_value:
+                        # persist mapping: store_key -> unified_msg_origin (string)
+                        self.unified_store.set(store_key, unified_value)
                 except Exception:
                     self.logger.exception("记录 unified 失败")
 
@@ -119,13 +129,14 @@ class MessageHandler:
                     event.stop_event()
                     return
 
-    async def send_proactive(self, unified: dict, msg_type: str, content: Any):
-        """主动发送：构造 MessageChain 并使用 context.send_message(unified, chain)"""
+    async def send_proactive(self, unified: str, msg_type: str, content: Any):
+        """主动发送：`unified` 应为 `unified_msg_origin` 的字符串，按官方文档使用 `context.send_message(unified, MessageChain)`。"""
         try:
             mc = MessageChain()
             if msg_type == "text":
                 mc = mc.message(content)
             elif msg_type == "image":
+                # prefer file_image/url helpers if available on MessageChain
                 if hasattr(mc, "file_image"):
                     mc = mc.file_image(content)
                 else:
@@ -137,6 +148,8 @@ class MessageHandler:
                     mc = mc.message(content)
             else:
                 mc = mc.message(content)
+
+            # official API expects a unified_msg_origin string
             await self.context.send_message(unified, mc)
         except Exception:
             self.logger.exception("send_proactive 发送失败")

@@ -7,9 +7,9 @@ from astrbot.api import logger
 import json
 import asyncio
 import os
-from core.unified_store import UnifiedStore
-from handlers.message_handler import MessageHandler
-from http_server import HttpServer
+from .core.unified_store import UnifiedStore
+from .handlers.message_handler import MessageHandler
+from .http_server import HttpServer
 
 @register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
 class MyPlugin(Star):
@@ -53,7 +53,7 @@ class MyPlugin(Star):
             logger.exception("Failed to load config")
             self._config = {}
 
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def on_private_message(self, event: AstrMessageEvent):
         # 将私聊事件交由 handlers/message_handler.py 处理
         try:
