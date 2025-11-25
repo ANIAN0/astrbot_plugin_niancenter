@@ -1,6 +1,7 @@
 import json
 import os
 from aiohttp import web
+from .core.request import fetch_json
 
 
 class HttpServer:
@@ -26,6 +27,47 @@ class HttpServer:
                 return web.json_response(cfg)
             except Exception:
                 return web.json_response({})
+
+        async def test_api(request):
+            try:
+                data = await request.json()
+            except Exception:
+                return web.json_response({"error": "invalid json"}, status=400)
+
+            rule_index = data.get("rule_index")
+            if rule_index is not None:
+                try:
+                    # ensure handler config is loaded
+                    try:
+                        self.handler._load_config()
+                    except Exception:
+                        pass
+                    rules = getattr(self.handler, "_config", {}).get("rules", [])
+                    rule = rules[int(rule_index)]
+                    url = rule.get("url")
+                    method = (rule.get("method") or "GET").upper()
+                    params = rule.get("params") or {}
+                    headers = rule.get("headers")
+                except Exception:
+                    return web.json_response({"error": "invalid rule_index"}, status=400)
+            else:
+                url = data.get("url")
+                method = (data.get("method") or "GET").upper()
+                params = data.get("params") or {}
+                headers = data.get("headers")
+
+            if not url:
+                return web.json_response({"error": "url required"}, status=400)
+
+            try:
+                resp = await fetch_json(url, method=method, params=params, headers=headers)
+                if isinstance(resp, (dict, list)):
+                    return web.json_response({"ok": True, "response": resp})
+                else:
+                    return web.json_response({"ok": True, "response": str(resp)})
+            except Exception:
+                self.logger.exception("test_api 调用失败")
+                return web.json_response({"ok": False, "error": "request failed"}, status=500)
 
         async def update_config(request):
             try:
@@ -82,6 +124,7 @@ class HttpServer:
 
         app.router.add_get("/get_config", get_config)
         app.router.add_post("/update_config", update_config)
+        app.router.add_post("/test_api", test_api)
         app.router.add_post("/send_message", send_message)
         app.router.add_get("/list_unified", list_unified)
         app.router.add_post("/delete_unified", delete_unified)
