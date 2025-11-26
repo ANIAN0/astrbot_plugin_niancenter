@@ -79,16 +79,139 @@ class MessageHandler:
                 # call external api
                 url = rule.get("url")
                 method = (rule.get("method") or "GET").upper()
-                params = rule.get("params") or {}
-                if rule.get("pass_event"):
-                    params.update({
-                        "session_id": getattr(event, "session_id", None),
-                        "message_id": getattr(event, "message_id", None),
-                        "message_str": getattr(event, "message_str", None),
-                        "timestamp": getattr(event, "timestamp", None),
-                    })
+                # build request body/params according to rule.body_fields if provided
+                request_params = {}
+
+                # helper: extract message components
+                def _collect_components(ev):
+                    texts = []
+                    images = []
+                    videos = []
+                    records = []
+                    # try event.get_messages()
+                    comps = None
+                    try:
+                        if hasattr(ev, "get_messages") and callable(ev.get_messages):
+                            comps = ev.get_messages()
+                    except Exception:
+                        comps = None
+                    if comps is None:
+                        try:
+                            mo = getattr(ev, "message_obj", None)
+                            if mo is not None and hasattr(mo, "message"):
+                                comps = mo.message
+                        except Exception:
+                            comps = None
+                    if comps is None:
+                        try:
+                            comps = getattr(ev, "message", None)
+                        except Exception:
+                            comps = None
+
+                    # fallback: use message_str as single text
+                    message_str_all = getattr(ev, "message_str", "") or ""
+
+                    if not comps:
+                        if message_str_all:
+                            texts = [message_str_all]
+                        return texts, images, videos, records
+
+                    for c in comps:
+                        try:
+                            c_cls = c.__class__.__name__.lower()
+                        except Exception:
+                            c_cls = ""
+                        # text/plain
+                        txt = None
+                        if hasattr(c, "text"):
+                            txt = getattr(c, "text")
+                        elif hasattr(c, "content"):
+                            txt = getattr(c, "content")
+                        elif hasattr(c, "data"):
+                            txt = getattr(c, "data")
+                        # image
+                        img = None
+                        if hasattr(c, "url"):
+                            img = getattr(c, "url")
+                        elif hasattr(c, "file"):
+                            img = getattr(c, "file")
+                        elif hasattr(c, "path"):
+                            img = getattr(c, "path")
+                        # video
+                        vid = None
+                        if hasattr(c, "url") and "video" in c_cls:
+                            vid = getattr(c, "url")
+                        elif hasattr(c, "file") and "video" in c_cls:
+                            vid = getattr(c, "file")
+
+                        if txt is not None and isinstance(txt, str) and txt:
+                            texts.append(txt)
+                        elif img is not None:
+                            images.append(str(img))
+                        elif vid is not None:
+                            videos.append(str(vid))
+                        else:
+                            # fallback: if class name suggests image/video
+                            if "image" in c_cls and hasattr(c, "url"):
+                                images.append(str(getattr(c, "url")))
+                            elif "video" in c_cls and hasattr(c, "url"):
+                                videos.append(str(getattr(c, "url")))
+
+                    return texts, images, videos, records
+
+                texts, images, videos, records = _collect_components(event)
+
+                # determine matched keyword (first occurrence)
+                matched_keyword = None
+                for k in (keywords if isinstance(keywords, (list, tuple)) else [keywords]):
+                    if k and k in message_str:
+                        matched_keyword = k
+                        break
+
+                body_fields = rule.get("body_fields")
+                if body_fields and isinstance(body_fields, list):
+                    for fld in body_fields:
+                        fname = fld.get("name")
+                        ftype = (fld.get("type") or "text").lower()
+                        if not fname:
+                            continue
+                        if ftype == "text":
+                            # build text param: remove first occurrence of matched keyword and following spaces
+                            if matched_keyword:
+                                # remove first occurrence only
+                                proc = message_str.replace(matched_keyword, "", 1)
+                                proc = proc.lstrip()
+                            else:
+                                proc = message_str
+                            # if we have separate Plain segments, use joined texts otherwise proc
+                            if texts:
+                                # prefer proc as representative; otherwise join texts
+                                value = proc if proc else ",".join(t.strip() for t in texts if t and t.strip())
+                            else:
+                                value = proc
+                            request_params[fname] = value
+                        elif ftype == "image":
+                            request_params[fname] = ",".join(images)
+                        elif ftype == "video":
+                            request_params[fname] = ",".join(videos)
+                        elif ftype == "record" or ftype == "voice":
+                            request_params[fname] = ",".join(records)
+                        else:
+                            # unknown type: try text
+                            request_params[fname] = ",".join(texts) if texts else message_str
+                else:
+                    # fallback to old behavior: use explicit params and pass_event
+                    request_params = rule.get("params") or {}
+                    if rule.get("pass_event"):
+                        request_params.update({
+                            "session_id": getattr(event, "session_id", None),
+                            "message_id": getattr(event, "message_id", None),
+                            "message_str": getattr(event, "message_str", None),
+                            "timestamp": getattr(event, "timestamp", None),
+                        })
+
                 try:
-                    resp = await fetch_json(url, method=method, params=params, headers=rule.get("headers"))
+                    resp = await fetch_json(url, method=method, params=request_params, headers=rule.get("headers"))
                 except Exception:
                     self.logger.exception("外部接口失败")
                     await event.send(event.plain_result(rule.get("on_error") or "接口调用失败"))

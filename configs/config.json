@@ -6,9 +6,25 @@
       "keywords": ["图片拼接"],
       "url": "http://124.156.205.61:5678/webhook/692d23a8-bc09-4606-bc31-7707de548537",
       "method": "POST",
+      "body_fields": [
+        {"name": "images", "type": "image"},
+        {"name": "text", "type": "text"}
+      ],
       "pass_event": true,
       "reply_type": "image",
-      "on_error": "图片生成失败"
+      "on_error": "失败"
+    },
+    {
+      "name": "URL替换",
+      "keywords": ["URL替换"],
+      "url": "http://124.156.205.61:5678/webhook/1a760b97-e7b2-449a-b3cd-80c90832304e",
+      "method": "POST",
+      "body_fields": [
+        {"name": "text", "type": "text"}
+      ],
+      "pass_event": true,
+      "reply_type": "text",
+      "on_error": "失败"
     }
   ]
 }
