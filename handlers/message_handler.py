@@ -27,6 +27,16 @@ class MessageHandler:
         self.cache_dir = os.path.join(self.plugin_dir, "cache")
         self._init_cache_dirs()
 
+    def _load_config(self):
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    self._config = json.load(f)
+            else:
+                self._config = {}
+        except Exception:
+            self._config = {}
+
     def _init_cache_dirs(self):
         """初始化缓存目录结构"""
         cache_types = ["image", "voice", "video", "file"]
