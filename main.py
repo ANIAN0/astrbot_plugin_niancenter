@@ -8,6 +8,7 @@ import json
 import asyncio
 import os
 from .core.unified_store import UnifiedStore
+from .core.task_manager import TaskManager
 from .handlers.message_handler import MessageHandler
 
 @register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
@@ -21,13 +22,28 @@ class MyPlugin(Star):
         self.unified_store = UnifiedStore(self.unified_store_path)
         self.message_handler = MessageHandler(context, self.config_path, self.unified_store, logger)
         self.http_server = None
+        self.task_manager = None
 
     async def initialize(self):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
         # 加载本地配置
         await self.load_config()
-        # 配置已加载。插件不再暴露对外 HTTP 接口。
-        pass
+        
+        # 初始化任务管理器
+        plugin_dir = os.path.dirname(__file__)
+        self.task_manager = TaskManager(
+            plugin_dir,
+            self._config,
+            logger,
+            self.context
+        )
+        
+        # 启动后台轮询任务
+        try:
+            await self.task_manager.start_polling()
+            logger.info("任务管理器已启动")
+        except Exception as e:
+            logger.exception(f"启动任务管理器失败: {e}")
 
     # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
     @filter.command("helloworld")
@@ -61,5 +77,10 @@ class MyPlugin(Star):
 
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
-        # 无需停止外部 HTTP 服务
-        return
+        # 停止后台任务轮询
+        if self.task_manager:
+            try:
+                await self.task_manager.stop_polling()
+                logger.info("任务管理器已停止")
+            except Exception as e:
+                logger.exception(f"停止任务管理器失败: {e}")

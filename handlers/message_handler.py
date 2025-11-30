@@ -1,10 +1,13 @@
 import os
 import json
 import asyncio
+import base64
 from typing import Any
+from pathlib import Path
+from datetime import datetime
 
 from astrbot.api.event import AstrMessageEvent
-from astrbot.core.message.components import Plain, Image, Video
+from astrbot.core.message.components import Plain, Image, Video, Record
 from ..core.request import fetch_json
 from ..core.unified_store import UnifiedStore
 from astrbot.api.event import MessageChain
@@ -18,16 +21,18 @@ class MessageHandler:
         self.logger = logger
         self.unified_store = unified_store
         self._load_config()
+        
+        # 初始化缓存目录
+        self.plugin_dir = os.path.dirname(os.path.dirname(config_path))
+        self.cache_dir = os.path.join(self.plugin_dir, "cache")
+        self._init_cache_dirs()
 
-    def _load_config(self):
-        try:
-            if os.path.exists(self.config_path):
-                with open(self.config_path, "r", encoding="utf-8") as f:
-                    self._config = json.load(f)
-            else:
-                self._config = {}
-        except Exception:
-            self._config = {}
+    def _init_cache_dirs(self):
+        """初始化缓存目录结构"""
+        cache_types = ["image", "voice", "video", "file"]
+        for cache_type in cache_types:
+            type_dir = os.path.join(self.cache_dir, cache_type)
+            os.makedirs(type_dir, exist_ok=True)
 
     async def match_and_handle(self, event: AstrMessageEvent):
         message_str = getattr(event, "message_str", "") or ""
@@ -228,6 +233,9 @@ class MessageHandler:
                     return
                 elif reply_type == "image":
                     image_path = rule.get("image_path") or resp
+                    # 检查是否需要缓存
+                    if isinstance(resp, str) and not os.path.exists(image_path):
+                        image_path = await self._cache_media(str(resp), "image")
                     if isinstance(image_path, str) and os.path.exists(image_path):
                         chain = [Image.fromFileSystem(str(image_path))]
                         await event.send(event.chain_result(chain))
@@ -237,6 +245,9 @@ class MessageHandler:
                     return
                 elif reply_type == "video":
                     video_path = rule.get("video_path") or resp
+                    # 检查是否需要缓存
+                    if isinstance(resp, str) and not os.path.exists(video_path):
+                        video_path = await self._cache_media(str(resp), "video")
                     if isinstance(video_path, str) and os.path.exists(video_path):
                         chain = [Video.fromFileSystem(str(video_path))]
                         await event.send(event.chain_result(chain))
@@ -245,6 +256,32 @@ class MessageHandler:
                             await event.send(event.video_result(video_path))
                         else:
                             await event.send(event.plain_result(f"[视频] {video_path}"))
+                    event.stop_event()
+                    return
+                elif reply_type == "voice":
+                    voice_path = rule.get("voice_path") or resp
+                    # 检查是否需要缓存
+                    if isinstance(resp, str) and not os.path.exists(voice_path):
+                        voice_path = await self._cache_media(str(resp), "voice")
+                    if isinstance(voice_path, str) and os.path.exists(voice_path):
+                        chain = [Record(file=voice_path, url=voice_path)]
+                        await event.send(event.chain_result(chain))
+                    else:
+                        await event.send(event.plain_result(f"[语音] {voice_path}"))
+                    event.stop_event()
+                    return
+                elif reply_type == "file":
+                    file_path = rule.get("file_path") or resp
+                    # 检查是否需要缓存
+                    if isinstance(resp, str) and not os.path.exists(file_path):
+                        file_path = await self._cache_media(str(resp), "file")
+                    if isinstance(file_path, str) and os.path.exists(file_path):
+                        from astrbot.api.message_components import File
+                        filename = os.path.basename(file_path)
+                        chain = [File(file=file_path, name=filename)]
+                        await event.send(event.chain_result(chain))
+                    else:
+                        await event.send(event.plain_result(f"[文件] {file_path}"))
                     event.stop_event()
                     return
                 else:
@@ -259,14 +296,37 @@ class MessageHandler:
             if msg_type == "text":
                 mc = mc.message(content)
             elif msg_type == "image":
-                # prefer file_image/url helpers if available on MessageChain
-                if hasattr(mc, "file_image"):
+                # 检查是否需要缓存
+                if isinstance(content, str) and not os.path.exists(content):
+                    content = await self._cache_media(content, "image")
+                if hasattr(mc, "file_image") and os.path.exists(content):
                     mc = mc.file_image(content)
                 else:
                     mc = mc.message(content)
             elif msg_type == "video":
-                if hasattr(mc, "file_video"):
+                # 检查是否需要缓存
+                if isinstance(content, str) and not os.path.exists(content):
+                    content = await self._cache_media(content, "video")
+                if hasattr(mc, "file_video") and os.path.exists(content):
                     mc = mc.file_video(content)
+                else:
+                    mc = mc.message(content)
+            elif msg_type == "voice":
+                # 检查是否需要缓存
+                if isinstance(content, str) and not os.path.exists(content):
+                    content = await self._cache_media(content, "voice")
+                if os.path.exists(content):
+                    mc = mc.message(Record(file=content, url=content))
+                else:
+                    mc = mc.message(content)
+            elif msg_type == "file":
+                # 检查是否需要缓存
+                if isinstance(content, str) and not os.path.exists(content):
+                    content = await self._cache_media(content, "file")
+                if os.path.exists(content):
+                    from astrbot.api.message_components import File
+                    filename = os.path.basename(content)
+                    mc = mc.message(File(file=content, name=filename))
                 else:
                     mc = mc.message(content)
             else:
@@ -276,3 +336,118 @@ class MessageHandler:
             await self.context.send_message(unified, mc)
         except Exception:
             self.logger.exception("send_proactive 发送失败")
+    
+    async def _cache_media(self, source: str, media_type: str) -> str:
+        """缓存媒体文件（URL或base64），返回本地路径"""
+        try:
+            cache_dir = os.path.join(self.cache_dir, media_type)
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            # 检查是否是URL
+            if source.startswith("http://") or source.startswith("https://"):
+                return await self._download_and_save(source, cache_dir, media_type)
+            # 检查是否是base64编码
+            elif source.startswith("data:") or self._is_base64(source):
+                return await self._decode_and_save_base64(source, cache_dir, media_type)
+            else:
+                # 其他情况返回原值
+                return source
+        except Exception as e:
+            self.logger.exception(f"缓存{media_type}文件失败: {e}")
+            # 缓存失败时返回原值
+            return source
+    
+    async def _download_and_save(self, url: str, cache_dir: str, media_type: str) -> str:
+        """从URL下载文件并保存到缓存"""
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=30) as resp:
+                    if resp.status == 200:
+                        content = await resp.read()
+                        
+                        # 根据Content-Type确定文件扩展名
+                        content_type = resp.headers.get("content-type", "")
+                        ext = self._get_extension_from_content_type(content_type, media_type)
+                        
+                        filename = f"{datetime.utcnow().timestamp()}{ext}"
+                        file_path = os.path.join(cache_dir, filename)
+                        
+                        with open(file_path, "wb") as f:
+                            f.write(content)
+                        
+                        self.logger.info(f"缓存文件下载成功: {url} -> {file_path}")
+                        return file_path
+                    else:
+                        raise Exception(f"下载失败: HTTP {resp.status}")
+        except Exception as e:
+            self.logger.exception(f"下载文件失败: {url}")
+            raise
+    
+    async def _decode_and_save_base64(self, content: str, cache_dir: str, media_type: str) -> str:
+        """解码base64内容并保存到缓存"""
+        try:
+            # 处理 data:image/png;base64, 格式
+            if content.startswith("data:"):
+                content = content.split(",", 1)[1]
+            
+            # 解码base64
+            decoded = base64.b64decode(content)
+            
+            # 确定文件扩展名
+            ext = self._get_extension_by_type(media_type)
+            filename = f"{datetime.utcnow().timestamp()}{ext}"
+            file_path = os.path.join(cache_dir, filename)
+            
+            with open(file_path, "wb") as f:
+                f.write(decoded)
+            
+            self.logger.info(f"Base64解码缓存成功: {file_path}")
+            return file_path
+        except Exception as e:
+            self.logger.exception("Base64解码失败")
+            raise
+    
+    def _is_base64(self, s: str) -> bool:
+        """检查字符串是否是base64编码"""
+        try:
+            if isinstance(s, str):
+                s_bytes = bytes(s, 'utf-8')
+            elif isinstance(s, bytes):
+                s_bytes = s
+            else:
+                return False
+            return base64.b64encode(base64.b64decode(s_bytes)) == s_bytes
+        except Exception:
+            return False
+    
+    def _get_extension_from_content_type(self, content_type: str, default_type: str) -> str:
+        """根据Content-Type获取文件扩展名"""
+        mime_to_ext = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "audio/mpeg": ".mp3",
+            "audio/wav": ".wav",
+            "video/mp4": ".mp4",
+            "video/webm": ".webm",
+            "application/pdf": ".pdf",
+        }
+        
+        for mime, ext in mime_to_ext.items():
+            if mime in content_type:
+                return ext
+        
+        return self._get_extension_by_type(default_type)
+    
+    def _get_extension_by_type(self, media_type: str) -> str:
+        """根据媒体类型获取默认扩展名"""
+        defaults = {
+            "image": ".png",
+            "voice": ".wav",
+            "video": ".mp4",
+            "file": "",
+            "text": ".txt"
+        }
+        return defaults.get(media_type, "")

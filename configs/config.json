@@ -1,5 +1,8 @@
 {
   "http_port": 6180,
+  "task_center_url": "https://hunian003-message.hf.space/plugins/astr_task_center/api/tasks",
+  "authorization": "",
+  "task_poll_interval": 60,
   "rules": [
     {
       "name": "图片拼接",
