@@ -3,17 +3,19 @@ from astrbot.core.message.components import BaseMessageComponent, Image, Plain, 
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult, MessageChain
 from astrbot.core.star.filter.event_message_type import EventMessageType
 from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
+from astrbot.api import logger, AstrBotConfig
 import json
 import asyncio
 import os
 from .core.unified_store import UnifiedStore
 from .core.task_manager import TaskManager
 from .handlers.message_handler import MessageHandler
+from .core.logger_manager import LoggerManager
+from .core.data_viewer import DataViewer
 
 @register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
 class MyPlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config_path = os.path.join(os.path.dirname(__file__), "configs", "config.json")
         self._config = {}
@@ -23,27 +25,91 @@ class MyPlugin(Star):
         self.message_handler = MessageHandler(context, self.config_path, self.unified_store, logger)
         self.http_server = None
         self.task_manager = None
+        
+        # 初始化配置和日志
+        self.plugin_config = config
+        self.plugin_dir = os.path.dirname(__file__)
+        self.log_manager = LoggerManager(self.plugin_dir, config)
+        self.data_viewer = DataViewer(self.plugin_dir)
 
     async def initialize(self):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
         # 加载本地配置
         await self.load_config()
         
-        # 初始化任务管理器
-        plugin_dir = os.path.dirname(__file__)
-        self.task_manager = TaskManager(
-            plugin_dir,
-            self._config,
-            logger,
-            self.context
-        )
+        # 初始化日志系统
+        enable_logging = self.plugin_config.get("enable_logging", True)
+        log_level = self.plugin_config.get("log_level", "INFO")
+        max_log_size = self.plugin_config.get("max_log_size_mb", 10)
+        log_backup_count = self.plugin_config.get("log_backup_count", 5)
         
-        # 启动后台轮询任务
+        if enable_logging:
+            self.log_manager.setup_file_logging(log_level, max_log_size, log_backup_count)
+            self.log_manager.log(f"插件日志已启用，级别: {log_level}", "INFO")
+        
+        # 初始化任务管理器
+        enable_polling = self.plugin_config.get("enable_task_polling", False)
+        if enable_polling:
+            plugin_dir = os.path.dirname(__file__)
+            self.task_manager = TaskManager(
+                plugin_dir,
+                self.plugin_config,
+                self.log_manager,
+                self.context
+            )
+            
+            try:
+                await self.task_manager.start_polling()
+                self.log_manager.log("任务管理器已启动", "INFO")
+            except Exception as e:
+                self.log_manager.log(f"启动任务管理器失败: {e}", "ERROR")
+        else:
+            self.log_manager.log("任务轮询已禁用，未启动任务管理器", "INFO")
+
+    @filter.command("niancenter_logs")
+    async def view_logs(self, event: AstrMessageEvent):
+        """查看插件日志"""
         try:
-            await self.task_manager.start_polling()
-            logger.info("任务管理器已启动")
+            logs = self.log_manager.get_recent_logs(50)
+            if logs:
+                yield event.plain_result(f"最近日志\n{logs}")
+            else:
+                yield event.plain_result("暂无日志记录")
         except Exception as e:
-            logger.exception(f"启动任务管理器失败: {e}")
+            yield event.plain_result(f"获取日志失败: {e}")
+
+    @filter.command("niancenter_tasks")
+    async def view_tasks(self, event: AstrMessageEvent):
+        """查看本地任务"""
+        try:
+            summary = self.data_viewer.get_tasks_summary()
+            msg = f"本地任务统计\n"
+            msg += f"总数: {summary.get('total', 0)}\n"
+            
+            status_dist = summary.get('status_distribution', {})
+            if status_dist:
+                msg += f"任务码\u5206布: {status_dist}\n"
+            
+            task_types = summary.get('task_types', {})
+            if task_types:
+                msg += f"类型分布: {task_types}\n"
+            
+            yield event.plain_result(msg)
+        except Exception as e:
+            yield event.plain_result(f"获取任务失败: {e}")
+
+    @filter.command("niancenter_origins")
+    async def view_origins(self, event: AstrMessageEvent):
+        """查看用户映射"""
+        try:
+            summary = self.data_viewer.get_unified_origins_summary()
+            msg = f"本地用户映射统计\n"
+            msg += f"总数: {summary.get('total', 0)}\n"
+            msg += summary.get('message', '')
+            
+            yield event.plain_result(msg)
+        except Exception as e:
+            yield event.plain_result(f"获取用户映射失败: {e}")
 
     # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
     @filter.command("helloworld")
@@ -81,6 +147,9 @@ class MyPlugin(Star):
         if self.task_manager:
             try:
                 await self.task_manager.stop_polling()
-                logger.info("任务管理器已停止")
+                self.log_manager.log("任务管理器已停止", "INFO")
             except Exception as e:
-                logger.exception(f"停止任务管理器失败: {e}")
+                self.log_manager.log(f"停止任务管理器失败: {e}", "ERROR")
+        
+        # 关闭日志
+        self.log_manager.close()

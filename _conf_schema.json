@@ -1,0 +1,74 @@
+{
+  "enable_task_polling": {
+    "description": "是否启用任务轮询",
+    "type": "bool",
+    "hint": "启用后，插件将自动轮询云端任务中心，同步主动消息和本地存储任务",
+    "default": false
+  },
+  "task_center_url": {
+    "description": "任务中心API地址",
+    "type": "string",
+    "hint": "任务中心的API端点，如 https://example.com/api/tasks",
+    "default": "https://hunian003-message.hf.space/plugins/astr_task_center/api/tasks",
+    "invisible": false
+  },
+  "authorization": {
+    "description": "任务中心API认证令牌",
+    "type": "string",
+    "hint": "用于向任务中心API认证，不填则禁用任务轮询",
+    "default": "",
+    "obvious_hint": true
+  },
+  "task_poll_interval": {
+    "description": "任务轮询间隔（秒）",
+    "type": "int",
+    "hint": "每隔多少秒向任务中心查询一次新任务，建议60-300秒",
+    "default": 60
+  },
+  "enable_logging": {
+    "description": "是否启用本地日志",
+    "type": "bool",
+    "hint": "启用后，插件运行日志将保存到本地文件 logs/niancenter.log",
+    "default": true
+  },
+  "log_level": {
+    "description": "日志级别",
+    "type": "string",
+    "hint": "记录哪些级别的日志，影响日志文件大小和详细程度",
+    "default": "INFO",
+    "options": ["DEBUG", "INFO", "WARNING", "ERROR"]
+  },
+  "max_log_size_mb": {
+    "description": "日志文件最大大小（MB）",
+    "type": "int",
+    "hint": "当日志文件达到此大小时自动轮转，0表示不限制",
+    "default": 10
+  },
+  "log_backup_count": {
+    "description": "保留的日志备份数量",
+    "type": "int",
+    "hint": "保留多少个备份日志文件，超出数量的自动删除",
+    "default": 5
+  },
+  "view_logs": {
+    "description": "查看日志",
+    "type": "string",
+    "hint": "点击下方的API端点可以查看最近的日志内容",
+    "default": "",
+    "invisible": true
+  },
+  "view_tasks": {
+    "description": "查看本地任务",
+    "type": "string",
+    "hint": "点击下方的API端点可以查看本地保存的所有任务",
+    "default": "",
+    "invisible": true
+  },
+  "view_unified_origins": {
+    "description": "查看用户映射",
+    "type": "string",
+    "hint": "点击下方的API端点可以查看本地保存的用户unified_msg_origin映射",
+    "default": "",
+    "invisible": true
+  }
+}
