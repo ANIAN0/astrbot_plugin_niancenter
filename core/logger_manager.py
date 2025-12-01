@@ -69,6 +69,26 @@ class LoggerManager:
         except Exception as e:
             print(f"记录日志失败: {e}")
     
+    def info(self, message: str):
+        """记录INFO级日志"""
+        self.log(message, "INFO")
+    
+    def warning(self, message: str):
+        """记录WARNING级日志"""
+        self.log(message, "WARNING")
+    
+    def error(self, message: str):
+        """记录ERROR级日志"""
+        self.log(message, "ERROR")
+    
+    def debug(self, message: str):
+        """记录DEBUG级日志"""
+        self.log(message, "DEBUG")
+    
+    def exception(self, message: str):
+        """记录异常信息"""
+        self.log(message, "ERROR")
+    
     def get_recent_logs(self, lines: int = 100) -> str:
         """获取最近的日志内容"""
         try:
