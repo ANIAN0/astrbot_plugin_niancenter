@@ -29,9 +29,19 @@ class MessageHandler:
         self.keywords_config = self._load_keywords()
         
         # 初始化缓存目录
-        self.plugin_dir = os.path.dirname(os.path.dirname(config_path))
         self.cache_dir = os.path.join(self.plugin_dir, "cache")
         self._init_cache_dirs()
+    
+    def _load_config(self):
+        """加载业务规则配置"""
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    self._config = json.load(f)
+            else:
+                self._config = {}
+        except Exception:
+            self._config = {}
 
     def _load_keywords(self):
         """加载关键字配置文件"""
