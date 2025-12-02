@@ -1,0 +1,6 @@
+{
+  "N登录": {
+    "handler": "login",
+    "description": "用户登录记录，记录session_id、group_id、sender等信息到unified_store"
+  }
+}

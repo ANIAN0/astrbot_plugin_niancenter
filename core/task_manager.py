@@ -87,6 +87,7 @@ class TaskManager:
         """轮询主循环"""
         consecutive_errors = 0
         max_consecutive_errors = 5
+        self.logger.info(f"轮询循环已启动，轮询间隔: {self._poll_interval}秒")
         
         while self._polling:
             try:
@@ -126,7 +127,7 @@ class TaskManager:
     async def _sync_tasks(self):
         """与远程服务器同步任务列表"""
         if not self.authorization:
-            self.logger.debug("未配置authorization，跳过任务同步")
+            self.logger.warning("未配置authorization，跳过任务同步")
             return
         
         try:
@@ -136,6 +137,8 @@ class TaskManager:
             now = datetime.utcnow()
             created_after = (now - timedelta(hours=24)).isoformat() + "Z"  # 获取过去24小时的任务
             created_before = now.isoformat() + "Z"
+            
+            self.logger.info("开始同步任务...")
             
             # 同步主动消息任务
             await self._fetch_and_sync_tasks(
@@ -154,7 +157,7 @@ class TaskManager:
             )
             
             self._last_sync_time = datetime.utcnow()
-            self.logger.debug("任务同步完成")
+            self.logger.info("任务同步完成")
         except asyncio.CancelledError:
             raise
         except Exception as e:

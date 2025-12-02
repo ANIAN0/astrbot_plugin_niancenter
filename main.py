@@ -34,7 +34,7 @@ class MyPlugin(Star):
 
     async def initialize(self):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
-        # 加载本地配置
+        # 加载本地配置（仅加载业务数据）
         await self.load_config()
         
         # 初始化日志系统

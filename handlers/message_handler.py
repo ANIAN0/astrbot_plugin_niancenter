@@ -10,6 +10,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Plain, Image, Video, Record
 from ..core.request import fetch_json
 from ..core.unified_store import UnifiedStore
+from ..core.keyword_handlers import KeywordHandler
 from astrbot.api.event import MessageChain
 
 
@@ -20,22 +21,29 @@ class MessageHandler:
         self._config = {}
         self.logger = logger
         self.unified_store = unified_store
+        self.keyword_handler = KeywordHandler(unified_store, logger)
         self._load_config()
+        
+        # 加载关键字配置
+        self.plugin_dir = os.path.dirname(os.path.dirname(config_path))
+        self.keywords_config = self._load_keywords()
         
         # 初始化缓存目录
         self.plugin_dir = os.path.dirname(os.path.dirname(config_path))
         self.cache_dir = os.path.join(self.plugin_dir, "cache")
         self._init_cache_dirs()
 
-    def _load_config(self):
+    def _load_keywords(self):
+        """加载关键字配置文件"""
         try:
-            if os.path.exists(self.config_path):
-                with open(self.config_path, "r", encoding="utf-8") as f:
-                    self._config = json.load(f)
-            else:
-                self._config = {}
-        except Exception:
-            self._config = {}
+            keywords_path = os.path.join(self.plugin_dir, "configs", "keywords.json")
+            if os.path.exists(keywords_path):
+                with open(keywords_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            return {}
+        except Exception as e:
+            self.logger.exception(f"加载关键字配置失败: {e}")
+            return {}
 
     def _init_cache_dirs(self):
         """初始化缓存目录结构"""
@@ -48,14 +56,21 @@ class MessageHandler:
         message_str = getattr(event, "message_str", "") or ""
         if not message_str:
             return
+        
+        # 优先检查特殊关键字（从配置文件读取）
+        for keyword_name in self.keywords_config.keys():
+            if keyword_name in message_str:
+                if await self.keyword_handler.handle(keyword_name, event):
+                    event.stop_event()
+                    return
 
+        # 再检查规则规则
         rules = self._config.get("rules", [])
         for rule in rules:
             keywords = rule.get("keywords", [])
             if isinstance(keywords, str):
                 keywords = [keywords]
             if any(k in message_str for k in keywords):
-                # record unified_msg_origin (prefer storing the unified string per official docs)
                 try:
                     umo = getattr(event, "unified_msg_origin", None)
                     unified_value = None
@@ -461,3 +476,5 @@ class MessageHandler:
             "text": ".txt"
         }
         return defaults.get(media_type, "")
+
+
