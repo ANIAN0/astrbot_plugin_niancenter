@@ -17,6 +17,7 @@ class LoggerManager:
         self.logger = None
         self.file_handler = None
         self.enable_file_logging = config.get("enable_logging", True)
+        self.log_detail = config.get("enable_logging", True)  # True=详细日志，False=仅异常日志
     
     def setup_file_logging(self, log_level: str = "INFO", max_size_mb: int = 10, backup_count: int = 5):
         """设置文件日志"""
@@ -59,7 +60,15 @@ class LoggerManager:
             print(f"设置文件日志失败: {e}")
     
     def log(self, message: str, level: str = "INFO"):
-        """记录日志"""
+        """记录日志（支持详细和异常模式）"""
+        # 如果未启用日志，直接返回
+        if not self.enable_file_logging:
+            return
+        
+        # 异常日志模式：仅记录ERROR和WARNING
+        if not self.log_detail and level not in ["ERROR", "WARNING"]:
+            return
+        
         if self.logger is None:
             return
         

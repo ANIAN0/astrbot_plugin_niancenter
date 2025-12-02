@@ -45,7 +45,10 @@ class MyPlugin(Star):
         
         if enable_logging:
             self.log_manager.setup_file_logging(log_level, max_log_size, log_backup_count)
-            self.log_manager.log(f"插件日志已启用，级别: {log_level}", "INFO")
+            # 两模式：log_level=INFO=详细日志, log_level=WARNING/ERROR=仅异常日志
+            enable_detail = log_level.upper() == "INFO" or log_level.upper() == "DEBUG"
+            self.log_manager.set_log_detail(enable_detail)
+            self.log_manager.log(f"插件日志已启用，级别: {log_level}, 日志模式: {'\u8be6细' if enable_detail else '\u4ec5异常'}", "INFO")
         
         # 初始化任务管理器
         enable_polling = self.plugin_config.get("enable_task_polling", False)

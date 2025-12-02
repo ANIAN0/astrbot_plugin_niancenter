@@ -170,12 +170,21 @@ class TaskManager:
                 "created_before": created_before
             }
             
+            # 详细日志模式：记录请求参数
+            if self.logger.should_log_detail():
+                self.logger.debug(f"同步{task_type}任务 - 请求URL: {self.task_center_url}")
+                self.logger.debug(f"同步{task_type}任务 - 请求参数: {params}")
+            
             resp = await fetch_json(
                 self.task_center_url,
                 method="GET",
                 params=params,
                 headers=headers
             )
+            
+            # 详细日志模式：记录响应结果
+            if self.logger.should_log_detail():
+                self.logger.debug(f"同步{task_type}任务 - 响应结果: {resp}")
             
             # 假设响应格式为 {"data": [...]} 或直接是列表
             new_tasks = resp.get("data", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
@@ -217,10 +226,17 @@ class TaskManager:
         """将任务标记为已同步"""
         try:
             synced_url = f"{self.task_center_url}/{task_id}/synced"
+            payload = {"synced": True}
+            
+            # 详细日志模式：记录标记同步请求
+            if self.logger.should_log_detail():
+                self.logger.debug(f"标记任务同步 - URL: {synced_url}")
+                self.logger.debug(f"标记任务同步 - 请求体: {payload}")
+            
             await fetch_json(
                 synced_url,
                 method="POST",
-                params={"synced": True},
+                params=payload,
                 headers=headers
             )
             self.logger.info(f"任务 {task_id} 标记为已同步")
@@ -382,10 +398,18 @@ class TaskManager:
     async def _download_and_save(self, url: str, cache_dir: str, media_type: str) -> str:
         """从URL下载文件并保存到缓存"""
         try:
+            # 详细日志模式：记录下载请求
+            if self.logger.should_log_detail():
+                self.logger.debug(f"下载媒体文件 - URL: {url}, 类型: {media_type}")
+            
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=30) as resp:
                     if resp.status == 200:
                         content = await resp.read()
+                        
+                        # 详细日志模式：记录下载结果
+                        if self.logger.should_log_detail():
+                            self.logger.debug(f"下载媒体文件 - 响应状态: {resp.status}, 文件大小: {len(content)} bytes")
                         
                         # 根据Content-Type确定文件扩展名
                         content_type = resp.headers.get("content-type", "")
