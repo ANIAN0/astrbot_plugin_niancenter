@@ -98,6 +98,14 @@ class LoggerManager:
         """记录异常信息"""
         self.log(message, "ERROR")
     
+    def set_log_detail(self, enable_detail: bool):
+        """设置日志模式（详细/异常）"""
+        self.log_detail = enable_detail
+    
+    def should_log_detail(self) -> bool:
+        """是否应详细日志模式"""
+        return self.log_detail
+    
     def get_recent_logs(self, lines: int = 100) -> str:
         """获取最近的日志内容"""
         try:
