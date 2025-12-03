@@ -49,26 +49,5 @@
     "type": "int",
     "hint": "保留多少个备份日志文件，超出数量的自动删除",
     "default": 5
-  },
-  "view_logs": {
-    "description": "查看日志",
-    "type": "string",
-    "hint": "点击下方的API端点可以查看最近的日志内容",
-    "default": "",
-    "invisible": true
-  },
-  "view_tasks": {
-    "description": "查看本地任务",
-    "type": "string",
-    "hint": "点击下方的API端点可以查看本地保存的所有任务",
-    "default": "",
-    "invisible": true
-  },
-  "view_unified_origins": {
-    "description": "查看用户映射",
-    "type": "string",
-    "hint": "点击下方的API端点可以查看本地保存的用户unified_msg_origin映射",
-    "default": "",
-    "invisible": true
   }
 }

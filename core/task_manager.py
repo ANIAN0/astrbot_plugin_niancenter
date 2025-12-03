@@ -196,13 +196,13 @@ class TaskManager:
             for task in new_tasks:
                 if isinstance(task, dict):
                     try:
-                        task_id = task.get("id")
+                        task_id = task.get("task_id")
                         if not task_id:
                             self.logger.warning(f"{task_type}任务缺少id")
                             continue
                         
                         # 检查是否已存在
-                        existing = next((t for t in self.tasks if t.get("id") == task_id), None)
+                        existing = next((t for t in self.tasks if t.get("task_id") == task_id), None)
                         if not existing:
                             # 添加任务到本地列表
                             self.tasks.append(task)
@@ -279,7 +279,7 @@ class TaskManager:
                     time_diff = (now - exec_time).total_seconds()
                     if 0 <= time_diff <= 300:  # 0 - 5分钟
                         task_type = task.get("type")
-                        task_id = task.get("id", "unknown")
+                        task_id = task.get("task_id", "unknown")
                         
                         try:
                             if task_type == "active_message":
@@ -304,7 +304,7 @@ class TaskManager:
     
     async def _execute_active_message(self, task: Dict[str, Any]):
         """执行主动消息任务"""
-        task_id = task.get("id", "unknown")
+        task_id = task.get("task_id", "unknown")
         try:
             # 标记为运行中
             await self._update_task_status(task_id, "running")
@@ -344,7 +344,7 @@ class TaskManager:
     
     async def _execute_local_storage(self, task: Dict[str, Any]):
         """执行本地存储任务"""
-        task_id = task.get("id", "unknown")
+        task_id = task.get("task_id", "unknown")
         try:
             # 标记为运行中
             await self._update_task_status(task_id, "running")
@@ -543,7 +543,7 @@ class TaskManager:
         """更新任务状态"""
         try:
             # 更新本地任务列表
-            task = next((t for t in self.tasks if t.get("id") == task_id), None)
+            task = next((t for t in self.tasks if t.get("task_id") == task_id), None)
             if task:
                 task["status"] = status
                 task["updated_at"] = datetime.utcnow().isoformat() + "Z"
@@ -572,7 +572,7 @@ class TaskManager:
     
     def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """获取任务状态"""
-        return next((t for t in self.tasks if t.get("id") == task_id), None)
+        return next((t for t in self.tasks if t.get("task_id") == task_id), None)
     
     def get_all_tasks(self) -> List[Dict[str, Any]]:
         """获取所有任务"""

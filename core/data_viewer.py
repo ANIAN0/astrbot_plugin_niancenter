@@ -44,7 +44,7 @@ class DataViewer:
                 if task_type not in task_types:
                     task_types[task_type] = []
                 task_types[task_type].append({
-                    "id": task.get("id", "N/A"),
+                    "id": task.get("task_id", "N/A"),
                     "status": task.get("status", "N/A"),
                     "type": task_type,
                     "created_at": task.get("created_at", "N/A"),
@@ -109,7 +109,7 @@ class DataViewer:
             if task_id:
                 # 获取特定任务
                 for task in tasks:
-                    if task.get("id") == task_id:
+                    if task.get("task_id") == task_id:
                         return {"task": task}
                 return {"error": f"未找到任务: {task_id}"}
             else:
