@@ -131,7 +131,7 @@ class TaskManager:
             return
         
         try:
-            headers = {"Authorization": f"Bearer {self.authorization}"}
+            headers = {"Authorization": self.authorization}
             
             # 构建查询参数
             now = datetime.utcnow()
@@ -167,16 +167,12 @@ class TaskManager:
         """获取特定类型的任务并进行同步"""
         try:
             params = {
+                "type": "get",
                 "task_type": task_type,
                 "synced": "false",
                 "created_after": created_after,
                 "created_before": created_before
             }
-            
-            # 详细日志模式：记录请求参数
-            if self.logger.should_log_detail():
-                self.logger.debug(f"同步{task_type}任务 - 请求URL: {self.task_center_url}")
-                self.logger.debug(f"同步{task_type}任务 - 请求参数: {params}")
             
             resp = await fetch_json(
                 self.task_center_url,
@@ -185,9 +181,7 @@ class TaskManager:
                 headers=headers
             )
             
-            # 详细日志模式：记录响应结果
-            if self.logger.should_log_detail():
-                self.logger.debug(f"同步{task_type}任务 - 响应结果: {resp}")
+
             
             # 假设响应格式为 {"data": [...]} 或直接是列表
             new_tasks = resp.get("data", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
@@ -228,18 +222,16 @@ class TaskManager:
     async def _mark_task_synced(self, task_id: str, headers: dict):
         """将任务标记为已同步"""
         try:
-            synced_url = f"{self.task_center_url}/{task_id}/synced"
-            payload = {"synced": True}
-            
-            # 详细日志模式：记录标记同步请求
-            if self.logger.should_log_detail():
-                self.logger.debug(f"标记任务同步 - URL: {synced_url}")
-                self.logger.debug(f"标记任务同步 - 请求体: {payload}")
+            params = {
+                "type": "update",
+                "task_id": task_id,
+                "synced": True
+            }
             
             await fetch_json(
-                synced_url,
+                self.task_center_url,
                 method="POST",
-                params=payload,
+                params=params,
                 headers=headers
             )
             self.logger.info(f"任务 {task_id} 标记为已同步")
@@ -556,14 +548,17 @@ class TaskManager:
             # 更新远程服务器
             if self.authorization:
                 try:
-                    headers = {"Authorization": f"Bearer {self.authorization}"}
-                    status_url = f"{self.task_center_url}/{task_id}/status"
+                    headers = {"Authorization": self.authorization}
                     
-                    params = {"status": status}
+                    params = {
+                        "type": "update",
+                        "task_id": task_id,
+                        "status": status
+                    }
                     if result:
                         params["result"] = result
                     
-                    await fetch_json(status_url, method="POST", params=params, headers=headers)
+                    await fetch_json(self.task_center_url, method="POST", params=params, headers=headers)
                     self.logger.debug(f"任务 {task_id} 状态更新为 {status}")
                 except Exception as remote_e:
                     self.logger.exception(f"更新远程任务状态失败 {task_id}: {remote_e}")
