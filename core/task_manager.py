@@ -192,14 +192,28 @@ class TaskManager:
                     try:
                         task_id = task.get("task_id")
                         if not task_id:
-                            self.logger.warning(f"{task_type}任务缺少id")
+                            self.logger.warning(f"{task_type}任务缺少task_id")
                             continue
                         
                         # 检查是否已存在
                         existing = next((t for t in self.tasks if t.get("task_id") == task_id), None)
                         if not existing:
+                            # 重新组织任务结构为本地存储格式
+                            content = task.get("content", {})
+                            local_task = {
+                                "task_id": task_id,
+                                "type": task.get("task_type", task_type),  # 优先使用task_type，否则使用参数中的task_type
+                                "unified_msg_origin": content.get("unified_msg_origin"),
+                                "message_type": content.get("type", "text"),
+                                "context": content.get("context", ""),
+                                "execution_time": task.get("execution_time"),
+                                "created_at": task.get("created_at"),
+                                "status": task.get("status", "pending"),
+                                "synced": task.get("synced", False),
+                                "result": task.get("result")
+                            }
                             # 添加任务到本地列表
-                            self.tasks.append(task)
+                            self.tasks.append(local_task)
                             sync_count += 1
                             self.logger.info(f"添加新任务: {task_id} (类型: {task_type})")
                             
@@ -251,26 +265,29 @@ class TaskManager:
                         continue
                     
                     # 检查执行时间
-                    scheduled_time = task.get("scheduled_time") or task.get("created_at")
-                    if not scheduled_time:
+                    execution_time = task.get("execution_time") or task.get("created_at")
+                    if not execution_time:
                         continue
                     
                     try:
                         # 解析时间字符串
-                        if isinstance(scheduled_time, str):
+                        if isinstance(execution_time, str):
                             # 移除Z后缀后解析
-                            time_str = scheduled_time.rstrip("Z")
+                            time_str = execution_time.rstrip("Z")
+                            # 处理 ISO 8601 格式中的 +00:00
+                            if "+" in time_str:
+                                time_str = time_str.split("+")[0]
                             exec_time = datetime.fromisoformat(time_str)
                         else:
-                            exec_time = datetime.fromtimestamp(scheduled_time)
+                            exec_time = datetime.fromtimestamp(execution_time)
                     except Exception as parse_e:
-                        self.logger.debug(f"无法解析任务执行时间: {scheduled_time} - {parse_e}")
+                        self.logger.debug(f"无法解析任务执行时间: {execution_time} - {parse_e}")
                         continue
                     
                     # 检查是否在过去5分钟内
                     time_diff = (now - exec_time).total_seconds()
                     if 0 <= time_diff <= 300:  # 0 - 5分钟
-                        task_type = task.get("type")
+                        task_type = task.get("type", "unknown")
                         task_id = task.get("task_id", "unknown")
                         
                         try:
@@ -302,7 +319,7 @@ class TaskManager:
             await self._update_task_status(task_id, "running")
             
             unified_msg_origin = task.get("unified_msg_origin")
-            msg_type = task.get("type", "text")
+            msg_type = task.get("message_type", "text")
             context = task.get("context", "")
             
             if not unified_msg_origin:
@@ -341,7 +358,7 @@ class TaskManager:
             # 标记为运行中
             await self._update_task_status(task_id, "running")
             
-            msg_type = task.get("type", "text")
+            msg_type = task.get("message_type", "text")
             context = task.get("context", "")
             
             try:
