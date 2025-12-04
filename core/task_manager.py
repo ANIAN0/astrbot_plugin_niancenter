@@ -256,9 +256,10 @@ class TaskManager:
                 self.logger.debug(f"标记任务同步 - 请求参数: {params}")
                 self.logger.debug(f"标记任务同步 - 请求头: {headers}")
             
+            # 改为GET请求（webhook仅支持GET）
             resp = await fetch_json(
                 self.task_center_url,
-                method="POST",
+                method="GET",
                 params=params,
                 headers=headers
             )
@@ -594,7 +595,7 @@ class TaskManager:
                     if result:
                         params["result"] = result
                     
-                    await fetch_json(self.task_center_url, method="POST", params=params, headers=headers)
+                    await fetch_json(self.task_center_url, method="GET", params=params, headers=headers)
                     self.logger.debug(f"任务 {task_id} 状态更新为 {status}")
                 except Exception as remote_e:
                     self.logger.exception(f"更新远程任务状态失败 {task_id}: {remote_e}")
