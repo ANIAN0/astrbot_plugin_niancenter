@@ -593,7 +593,7 @@ class TaskManager:
                         "status": status
                     }
                     if result:
-                        params["result"] = result
+                        params["result"] = json.dumps(result)  # 转换为JSON字符串
                     
                     await fetch_json(self.task_center_url, method="GET", params=params, headers=headers)
                     self.logger.debug(f"任务 {task_id} 状态更新为 {status}")
