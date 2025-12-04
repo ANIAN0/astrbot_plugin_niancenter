@@ -140,21 +140,8 @@ class TaskManager:
             
             self.logger.info("开始同步任务...")
             
-            # 同步主动消息任务
-            await self._fetch_and_sync_tasks(
-                "active_message", 
-                created_after, 
-                created_before, 
-                headers
-            )
-            
-            # 同步本地存储任务
-            await self._fetch_and_sync_tasks(
-                "local_storage", 
-                created_after, 
-                created_before, 
-                headers
-            )
+            # 合并请求：一次性获取所有任务类型
+            await self._fetch_and_sync_all_tasks(created_after, created_before, headers)
             
             self._last_sync_time = datetime.utcnow()
             self.logger.info("任务同步完成")
@@ -163,16 +150,22 @@ class TaskManager:
         except Exception as e:
             self.logger.exception(f"任务同步失败: {e}")
     
-    async def _fetch_and_sync_tasks(self, task_type: str, created_after: str, created_before: str, headers: dict):
-        """获取特定类型的任务并进行同步"""
+    async def _fetch_and_sync_all_tasks(self, created_after: str, created_before: str, headers: dict):
+        """获取所有任务类型（无task_type参数）并进行同步"""
         try:
+            # 合并请求：不带task_type参数
             params = {
                 "type": "get",
-                "task_type": task_type,
                 "synced": "false",
                 "created_after": created_after,
                 "created_before": created_before
             }
+            
+            # 详细日志模式：记录请求详情
+            if self.logger.should_log_detail():
+                self.logger.debug(f"获取任务 - URL: {self.task_center_url}")
+                self.logger.debug(f"获取任务 - 请求参数: {params}")
+                self.logger.debug(f"获取任务 - 请求头: {headers}")
             
             resp = await fetch_json(
                 self.task_center_url,
@@ -181,7 +174,9 @@ class TaskManager:
                 headers=headers
             )
             
-
+            # 详细日志模式：记录完整响应
+            if self.logger.should_log_detail():
+                self.logger.debug(f"获取任务 - 响应: {resp}")
             
             # 假设响应格式为 {"data": [...]} 或直接是列表
             new_tasks = resp.get("data", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
@@ -192,7 +187,7 @@ class TaskManager:
                     try:
                         task_id = task.get("task_id")
                         if not task_id:
-                            self.logger.warning(f"{task_type}任务缺少task_id")
+                            self.logger.warning("任务缺少task_id")
                             continue
                         
                         # 检查是否已存在
@@ -200,9 +195,10 @@ class TaskManager:
                         if not existing:
                             # 重新组织任务结构为本地存储格式
                             content = task.get("content", {})
+                            task_type = task.get("task_type", "unknown")
                             local_task = {
                                 "task_id": task_id,
-                                "type": task.get("task_type", task_type),  # 优先使用task_type，否则使用参数中的task_type
+                                "type": task_type,
                                 "unified_msg_origin": content.get("unified_msg_origin"),
                                 "message_type": content.get("type", "text"),
                                 "context": content.get("context", ""),
@@ -217,24 +213,24 @@ class TaskManager:
                             sync_count += 1
                             self.logger.info(f"添加新任务: {task_id} (类型: {task_type})")
                             
-                            # 标记为已同步
+                            # 标记为已同步：发送update请求
                             try:
                                 await self._mark_task_synced(task_id, headers)
                             except Exception as e:
-                                self.logger.exception(f"主动标记{task_id}同步失败: {e}")
+                                self.logger.exception(f"标记{task_id}同步失败: {e}")
                     except Exception as e:
-                        self.logger.exception(f"处理{task_type}任务失败: {e}")
+                        self.logger.exception(f"处理任务失败: {e}")
             
             if sync_count > 0:
                 self._save_tasks()
-                self.logger.info(f"同步了{sync_count}个{task_type}类型的任务")
+                self.logger.info(f"同步了{sync_count}个任务")
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            self.logger.exception(f"同步{task_type}任务失败: {e}")
+            self.logger.exception(f"获取任务失败: {e}")
     
     async def _mark_task_synced(self, task_id: str, headers: dict):
-        """将任务标记为已同步"""
+        """将任务标记为已同步（发送update请求）"""
         try:
             params = {
                 "type": "update",
@@ -242,12 +238,23 @@ class TaskManager:
                 "synced": True
             }
             
-            await fetch_json(
+            # 详细日志模式：记录请求详情
+            if self.logger.should_log_detail():
+                self.logger.debug(f"标记任务同步 - URL: {self.task_center_url}")
+                self.logger.debug(f"标记任务同步 - 请求参数: {params}")
+                self.logger.debug(f"标记任务同步 - 请求头: {headers}")
+            
+            resp = await fetch_json(
                 self.task_center_url,
                 method="POST",
                 params=params,
                 headers=headers
             )
+            
+            # 详细日志模式：记录完整响应
+            if self.logger.should_log_detail():
+                self.logger.debug(f"标记任务同步 - 响应: {resp}")
+            
             self.logger.info(f"任务 {task_id} 标记为已同步")
         except Exception as e:
             self.logger.exception(f"标记任务同步失败 {task_id}: {e}")
