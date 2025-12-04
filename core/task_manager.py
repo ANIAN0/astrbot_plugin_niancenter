@@ -190,7 +190,17 @@ class TaskManager:
                             self.logger.warning("任务缺少task_id")
                             continue
                         
-                        # 检查是否已存在
+                        # 先标记为已同步（对所有获取到的任务都发送update请求）
+                        try:
+                            await self._mark_task_synced(task_id, headers)
+                            # 标记同步成功后，更新本地任务的synced状态
+                            task_record = next((t for t in self.tasks if t.get("task_id") == task_id), None)
+                            if task_record:
+                                task_record["synced"] = True
+                        except Exception as e:
+                            self.logger.exception(f"标记{task_id}同步失败: {e}")
+                        
+                        # 再检查是否本地已存在（仅添加新任务）
                         existing = next((t for t in self.tasks if t.get("task_id") == task_id), None)
                         if not existing:
                             # 重新组织任务结构为本地存储格式
@@ -208,14 +218,16 @@ class TaskManager:
                                 "synced": task.get("synced", False),
                                 "result": task.get("result")
                             }
-                            # 添加任务到本地列表
+                            # 添加任务到本地列表（synced初始值根据接口返回）
                             self.tasks.append(local_task)
                             sync_count += 1
                             self.logger.info(f"添加新任务: {task_id} (类型: {task_type})")
                             
-                            # 标记为已同步：发送update请求
+                            # 然后标记为已同步并更新端点状态
                             try:
                                 await self._mark_task_synced(task_id, headers)
+                                # 标记同步成功后，更新本地任务的synced状态
+                                local_task["synced"] = True
                             except Exception as e:
                                 self.logger.exception(f"标记{task_id}同步失败: {e}")
                     except Exception as e:
@@ -223,7 +235,7 @@ class TaskManager:
             
             if sync_count > 0:
                 self._save_tasks()
-                self.logger.info(f"同步了{sync_count}个任务")
+                self.logger.info(f"同步了{sync_count}个新任务並更新了synced状态")
         except asyncio.CancelledError:
             raise
         except Exception as e:
