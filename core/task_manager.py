@@ -247,7 +247,7 @@ class TaskManager:
             params = {
                 "type": "update",
                 "task_id": task_id,
-                "synced": True
+                "synced": "true"  # 转换为字符串
             }
             
             # 详细日志模式：记录请求详情
