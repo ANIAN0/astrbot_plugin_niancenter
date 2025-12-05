@@ -7,11 +7,11 @@ from astrbot.api import logger, AstrBotConfig
 import json
 import asyncio
 import os
-from .core.unified_store import UnifiedStore
+from .storage.unified_store import UnifiedStore
 from .core.task_manager import TaskManager
 from .handlers.message_handler import MessageHandler
-from .core.logger_manager import LoggerManager
-from .core.data_viewer import DataViewer
+from .plugin_config.logger_manager import LoggerManager
+from .storage.data_viewer import DataViewer
 
 @register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
 class MyPlugin(Star):
