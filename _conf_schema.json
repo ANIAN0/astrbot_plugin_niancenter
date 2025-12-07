@@ -49,5 +49,30 @@
     "type": "int",
     "hint": "保留多少个备份日志文件，超出数量的自动删除",
     "default": 5
+  },
+  "enable_note_summary": {
+    "description": "是否启用笔记每日汇总",
+    "type": "bool",
+    "hint": "启用后，系统将每天定时生成笔记汇总并发送给用户",
+    "default": true
+  },
+  "note_summary_hour": {
+    "description": "笔记汇总生成时间（小时）",
+    "type": "int",
+    "hint": "每天几点生成笔记汇总，0-23",
+    "default": 22
+  },
+  "note_summary_minute": {
+    "description": "笔记汇总生成时间（分钟）",
+    "type": "int",
+    "hint": "几分生成笔记汇总，0-59",
+    "default": 0
+  },
+  "task_center_entry_url": {
+    "description": "任务中心入口URL",
+    "type": "string",
+    "hint": "用户创建账户时返回的任务中心链接",
+    "default": "",
+    "invisible": false
   }
 }

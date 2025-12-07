@@ -8,10 +8,11 @@ from typing import Optional
 class LoggerManager:
     """管理插件的本地日志记录"""
     
-    def __init__(self, plugin_dir: str, config: dict):
-        self.plugin_dir = plugin_dir
+    def __init__(self, data_dir: str, config: dict):
+        self.data_dir = data_dir  # 数据目录
         self.config = config
-        self.logs_dir = os.path.join(plugin_dir, "logs")
+        # 日志存储在数据目录下
+        self.logs_dir = os.path.join(data_dir, "logs")
         os.makedirs(self.logs_dir, exist_ok=True)
         
         self.logger = None

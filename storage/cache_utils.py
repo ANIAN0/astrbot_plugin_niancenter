@@ -4,8 +4,9 @@ from datetime import datetime
 from typing import Optional
 
 class CacheUtils:
-    def __init__(self, plugin_dir: str):
-        self.cache_dir = os.path.join(plugin_dir, "cache")
+    def __init__(self, data_dir: str):
+        # 缓存存储在数据目录
+        self.cache_dir = os.path.join(data_dir, "cache")
         self._init_cache_dirs()
 
     def _init_cache_dirs(self):

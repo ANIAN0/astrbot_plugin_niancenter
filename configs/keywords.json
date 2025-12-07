@@ -1,6 +1,46 @@
 {
-  "N登录": {
-    "handler": "login",
-    "description": "用户登录记录，记录session_id、group_id、sender等信息到unified_store"
+  "n登录": {
+    "handler": "create_user",
+    "description": "创建用户，记录账户信息并返回密钥与任务中心URL"
+  },
+  "n修改密码": {
+    "handler": "change_password",
+    "description": "使用会话唯一id校验并更新加密后的密钥"
+  },
+  "n记录": {
+    "handler": "add_note",
+    "description": "添加灵感记录，支持文本、图片、视频、音频等多种类型。格式: n记录 内容 # 分组 @关键字"
+  },
+  "n搜索": {
+    "handler": "search_note",
+    "description": "搜索灵感记录，根据关键字查找相关记录。格式: n搜索 关键字"
+  },
+  "nt1": {
+    "handler": "trigger_note_summary",
+    "description": "手动触发今日笔记汇总生成并发送文件。格式: nt1"
+  },
+  "n待办": {
+    "handler": "add_todo",
+    "description": "创建新待办事项。格式: n待办 待办内容 by预计完成时间（支持今日/明日/今日 HH:MM/明日 HH:MM/MM-DD HH:MM）"
+  },
+  "n跟进": {
+    "handler": "add_follow_up",
+    "description": "添加待办跟进记录，支持文本和多媒体。格式: n跟进 序号 跟进内容"
+  },
+  "n关闭": {
+    "handler": "close_todo",
+    "description": "关闭已完成的待办事项。格式: n关闭 序号"
+  },
+  "n看待办": {
+    "handler": "list_todos",
+    "description": "查询当前所有进行中的待办事项。格式: n看待办"
+  },
+  "nt2": {
+    "handler": "trigger_todo_summary",
+    "description": "手动触发今日待办汇总生成并发送文件。格式: nt2"
+  },
+  "n当前时间": {
+    "handler": "get_current_time",
+    "description": "查看服务器当前时间，包括本地时间、UTC时间和时区信息。格式: n当前时间"
   }
 }

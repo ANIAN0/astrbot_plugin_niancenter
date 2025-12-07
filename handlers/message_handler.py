@@ -5,27 +5,35 @@ from typing import Any
 from astrbot.api.event import AstrMessageEvent
 from ..storage.unified_store import UnifiedStore
 from ..session.keyword_handlers import KeywordHandler
+
 from ..storage.cache_utils import CacheUtils
 from ..processing.rule_processor import RuleProcessor
 from astrbot.api.event import MessageChain
 
 
 class MessageHandler:
-    def __init__(self, context, config_path: str, unified_store: UnifiedStore, logger):
+    def __init__(self, context, config_path: str, unified_store: UnifiedStore, logger, data_dir: str):
         self.context = context
         self.config_path = config_path
         self._config = {}
         self.logger = logger
         self.unified_store = unified_store
-        self.keyword_handler = KeywordHandler(unified_store, logger)
+        self.data_dir = data_dir  # 数据目录
+        
+        # 插件目录（从 config_path 推导）
+        self.plugin_dir = os.path.dirname(os.path.dirname(config_path))
+        
+        # 加载配置
         self._load_config()
         
         # 加载关键字配置
-        self.plugin_dir = os.path.dirname(os.path.dirname(config_path))
         self.keywords_config = self._load_keywords()
         
-        # 初始化缓存工具
-        self.cache_utils = CacheUtils(self.plugin_dir)
+        # 初始化关键字处理器（使用 data_dir）
+        self.keyword_handler = KeywordHandler(context, unified_store, logger, data_dir, self._config)
+        
+        # 初始化缓存工具（使用 data_dir）
+        self.cache_utils = CacheUtils(data_dir)
         
         # 初始化规则处理器
         self.rule_processor = RuleProcessor(
@@ -62,11 +70,44 @@ class MessageHandler:
             return
         
         # 优先检查特殊关键字（从配置文件读取）
-        for keyword_name in self.keywords_config.keys():
-            if keyword_name in message_str:
+        # 按关键字长度从长到短排序，避免短关键字覆盖长关键字
+        triggered = False
+        sorted_keywords = sorted(self.keywords_config.keys(), key=lambda x: len(x), reverse=True)
+        
+        # 移除可能的 / 前缀
+        clean_msg = message_str.strip()
+        if clean_msg.startswith("/"):
+            clean_msg = clean_msg[1:]
+        
+        self.logger.debug(f"正在匹配关键字: {clean_msg}")
+        
+        for keyword_name in sorted_keywords:
+            if clean_msg.startswith(keyword_name):
+                self.logger.info(f"匹配到关键字: {keyword_name}")
                 if await self.keyword_handler.handle(keyword_name, event):
                     event.stop_event()
-                    return
+                    triggered = True
+                    break
+        if triggered:
+            return
+            
+        # 兜底内置关键字（命令以 / 开头）
+        if message_str.strip().startswith("/n登录"):
+            if await self.keyword_handler.handle("n登录", event):
+                event.stop_event()
+                return
+        if message_str.strip().startswith("/n修改密码"):
+            if await self.keyword_handler.handle("n修改密码", event):
+                event.stop_event()
+                return
+        if message_str.strip().startswith("/n记录"):
+            if await self.keyword_handler.handle("n记录", event):
+                event.stop_event()
+                return
+        if message_str.strip().startswith("/n搜索"):
+            if await self.keyword_handler.handle("n搜索", event):
+                event.stop_event()
+                return
 
         # 交由规则处理器处理
         if await self.rule_processor.handle(event):

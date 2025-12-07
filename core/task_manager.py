@@ -13,14 +13,14 @@ from ..scheduler.task_executor import TaskExecutor
 class TaskManager:
     """管理主动消息任务和本地存储任务的轮询、同步和执行"""
     
-    def __init__(self, plugin_dir: str, config: dict, logger, context):
-        self.plugin_dir = plugin_dir
+    def __init__(self, data_dir: str, config: dict, logger, context):
+        self.data_dir = data_dir  # 数据目录
         self.config = config
         self.logger = logger
         self.context = context
         
-        # 初始化任务存储路径
-        self.tasks_dir = os.path.join(plugin_dir, "configs")
+        # 初始化任务存储路径（存储在数据目录）
+        self.tasks_dir = os.path.join(data_dir, "tasks")
         os.makedirs(self.tasks_dir, exist_ok=True)
         
         self.tasks_file = os.path.join(self.tasks_dir, "tasks.json")
@@ -36,7 +36,7 @@ class TaskManager:
         self._poll_interval = config.get("task_poll_interval", 60)
         
         # 初始化缓存工具
-        self.cache_utils = CacheUtils(plugin_dir)
+        self.cache_utils = CacheUtils(data_dir)
         
         # 初始化消息构建器
         self.message_chain_builder = MessageChainBuilder(logger)

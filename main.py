@@ -12,25 +12,43 @@ from .core.task_manager import TaskManager
 from .handlers.message_handler import MessageHandler
 from .plugin_config.logger_manager import LoggerManager
 from .storage.data_viewer import DataViewer
+from .scheduler.note_summary_task import NoteSummaryTask
+from .scheduler.todo_reminder_task import TodoReminderTask
+from .scheduler.todo_summary_task import TodoSummaryTask
+from .todos.todo_manager import TodoManager
+from .users.user_manager import UsersManager
 
 @register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
 class MyPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        self.config_path = os.path.join(os.path.dirname(__file__), "configs", "config.json")
+        
+        # 设置数据目录 - 使用 AstrBot 统一数据目录
+        self.plugin_dir = os.path.dirname(__file__)
+        # 获取 AstrBot 根目录 (AstrBot/data/plugins/xxx -> AstrBot/)
+        astrbot_root = os.path.dirname(os.path.dirname(os.path.dirname(self.plugin_dir)))
+        self.data_dir = os.path.join(astrbot_root, "data", "plugin_data", "astrbot_plugin_niancenter")
+        os.makedirs(self.data_dir, exist_ok=True)
+        
+        # 配置文件仍然在插件目录（不会被删除）
+        self.config_path = os.path.join(self.plugin_dir, "configs", "config.json")
         self._config = {}
         self._http_runner = None
-        self.unified_store_path = os.path.join(os.path.dirname(__file__), "configs", "unified_store.json")
+        
+        # 用户数据存储在数据目录
+        self.unified_store_path = os.path.join(self.data_dir, "unified_store.json")
         self.unified_store = UnifiedStore(self.unified_store_path)
-        self.message_handler = MessageHandler(context, self.config_path, self.unified_store, logger)
+        self.message_handler = MessageHandler(context, self.config_path, self.unified_store, logger, self.data_dir)
         self.http_server = None
         self.task_manager = None
+        self.note_summary_task = None
+        self.todo_reminder_task = None
+        self.todo_summary_task = None
         
         # 初始化配置和日志
         self.plugin_config = config
-        self.plugin_dir = os.path.dirname(__file__)
-        self.log_manager = LoggerManager(self.plugin_dir, config)
-        self.data_viewer = DataViewer(self.plugin_dir)
+        self.log_manager = LoggerManager(self.data_dir, config)
+        self.data_viewer = DataViewer(self.data_dir)
 
     async def initialize(self):
         """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
@@ -54,9 +72,8 @@ class MyPlugin(Star):
         # 初始化任务管理器
         enable_polling = self.plugin_config.get("enable_task_polling", False)
         if enable_polling:
-            plugin_dir = os.path.dirname(__file__)
             self.task_manager = TaskManager(
-                plugin_dir,
+                self.data_dir,
                 self.plugin_config,
                 self.log_manager,
                 self.context
@@ -69,6 +86,69 @@ class MyPlugin(Star):
                 self.log_manager.log(f"启动任务管理器失败: {e}", "ERROR")
         else:
             self.log_manager.log("任务轮询已禁用，未启动任务管理器", "INFO")
+        
+        # 初始化笔记汇总任务
+        enable_note_summary = self.plugin_config.get("enable_note_summary", True)
+        if enable_note_summary:
+            summary_hour = self.plugin_config.get("note_summary_hour", 22)
+            summary_minute = self.plugin_config.get("note_summary_minute", 0)
+            
+            self.note_summary_task = NoteSummaryTask(
+                self.data_dir,
+                self.log_manager,
+                self.context
+            )
+            
+            try:
+                await self.note_summary_task.start(summary_hour, summary_minute)
+                self.log_manager.log(f"笔记汇总任务已启动，每天 {summary_hour:02d}:{summary_minute:02d} 执行", "INFO")
+            except Exception as e:
+                self.log_manager.log(f"启动笔记汇总任务失败: {e}", "ERROR")
+        else:
+            self.log_manager.log("笔记汇总任务已禁用", "INFO")
+        
+        # 初始化待办管理器和定时任务
+        enable_todo_features = self.plugin_config.get("enable_todo_features", True)
+        if enable_todo_features:
+            # 初始化 TodoManager
+            user_data_dir = os.path.join(self.data_dir, "users")
+            users_manager = UsersManager(self.data_dir, self.log_manager, self.plugin_config)
+            todo_manager = TodoManager(user_data_dir, self.log_manager)
+            
+            # 启动待办提醒任务（8点和14点）
+            enable_todo_reminder = self.plugin_config.get("enable_todo_reminder", True)
+            if enable_todo_reminder:
+                self.todo_reminder_task = TodoReminderTask(
+                    todo_manager,
+                    users_manager,
+                    self.context,
+                    self.log_manager
+                )
+                try:
+                    self.todo_reminder_task.start()
+                    self.log_manager.log("待办提醒任务已启动，每奥8:00和14:00执行", "INFO")
+                except Exception as e:
+                    self.log_manager.log(f"启动待办提醒任务失败: {e}", "ERROR")
+            
+            # 启动待办总结任务
+            enable_todo_summary = self.plugin_config.get("enable_todo_summary", True)
+            if enable_todo_summary:
+                summary_hour = self.plugin_config.get("todo_summary_hour", 22)
+                summary_minute = self.plugin_config.get("todo_summary_minute", 30)
+                
+                self.todo_summary_task = TodoSummaryTask(
+                    todo_manager,
+                    users_manager,
+                    self.context,
+                    self.log_manager
+                )
+                try:
+                    await self.todo_summary_task.start(summary_hour, summary_minute)
+                    self.log_manager.log(f"待办总结任务已启动，每天 {summary_hour:02d}:{summary_minute:02d} 执行", "INFO")
+                except Exception as e:
+                    self.log_manager.log(f"启动待办总结任务失败: {e}", "ERROR")
+        else:
+            self.log_manager.log("待办功能已禁用", "INFO")
 
     @filter.command("niancenter_logs")
     async def view_logs(self, event: AstrMessageEvent):
@@ -139,11 +219,13 @@ class MyPlugin(Star):
 
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     async def on_private_message(self, event: AstrMessageEvent):
+        """处理所有私聊消息"""
         # 将私聊事件交由 handlers/message_handler.py 处理
         try:
             await self.message_handler.match_and_handle(event)
         except Exception:
             logger.exception("message_handler 处理失败")
+        return  # 事件类型过滤器不需要 yield，但需要明确返回
 
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
@@ -154,6 +236,30 @@ class MyPlugin(Star):
                 self.log_manager.log("任务管理器已停止", "INFO")
             except Exception as e:
                 self.log_manager.log(f"停止任务管理器失败: {e}", "ERROR")
+        
+        # 停止笔记汇总任务
+        if self.note_summary_task:
+            try:
+                await self.note_summary_task.stop()
+                self.log_manager.log("笔记汇总任务已停止", "INFO")
+            except Exception as e:
+                self.log_manager.log(f"停止笔记汇总任务失败: {e}", "ERROR")
+                
+        # 停止待办提醒任务
+        if self.todo_reminder_task:
+            try:
+                self.todo_reminder_task.stop()
+                self.log_manager.log("待办提醒任务已停止", "INFO")
+            except Exception as e:
+                self.log_manager.log(f"停止待办提醒任务失败: {e}", "ERROR")
+                
+        # 停止待办总结任务
+        if self.todo_summary_task:
+            try:
+                await self.todo_summary_task.stop()
+                self.log_manager.log("待办总结任务已停止", "INFO")
+            except Exception as e:
+                self.log_manager.log(f"停止待办总结任务失败: {e}", "ERROR")
         
         # 关闭日志
         self.log_manager.close()

@@ -6,10 +6,10 @@ from typing import Dict, List, Any
 class DataViewer:
     """用于查看和管理本地数据"""
     
-    def __init__(self, plugin_dir: str):
-        self.plugin_dir = plugin_dir
-        self.tasks_file = os.path.join(plugin_dir, "configs", "tasks.json")
-        self.unified_store_file = os.path.join(plugin_dir, "configs", "unified_store.json")
+    def __init__(self, data_dir: str):
+        self.data_dir = data_dir  # 数据目录
+        self.tasks_file = os.path.join(data_dir, "tasks", "tasks.json")
+        self.unified_store_file = os.path.join(data_dir, "unified_store.json")
     
     def get_tasks_summary(self) -> Dict[str, Any]:
         """获取任务列表摘要"""
